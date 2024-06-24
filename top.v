@@ -7,7 +7,8 @@
 module top(
     input clock, reset, ignition, d_door, p_door, switch, pedal,
     output set, fp_status,
-    output[2:0] siren
+    output[2:0] siren,
+    output[7:0] an, dec_cat
 );
 
 wire ig, dd, pd, s, p;
@@ -38,6 +39,7 @@ reg[3:0] t, EA, PE;
 wire waited, load, en_timer, en_arm, en_disarm, start_count_1, start_count_2;
 wire start_count_3, en_triggered;
 wire[2:0] color;
+wire[3:0] t_display;
 
 reg has_p;
 
@@ -47,7 +49,7 @@ rgb RGB_DRIVER(
 
 timer COUNTER(
     .clock(clock), .reset(reset), .en(en_timer), .load(load),
-    .t_default(t), .waited(waited)
+    .t_default(t), .waited(waited), .t_display(t_display)
 );
 
 arm ARM_DRIVER(
@@ -65,6 +67,12 @@ fuelpump FUEL_PUMP_DRIVER(
     .pedal(p), .status(fp_status)
 );
 
+dspl_drv_NexysA7 TIMER_DISPLAY(
+    .clock(clock), .reset(reset), .d1({1'b1, EA, 1'b0}), .d2(0), .d3(0),
+    .d4(0), .d5(0), .d6(0), .d7(0), .d8({1'b1, t_display, 1'b0}),
+    .an(an), .dec_cat(dec_cat)
+);
+
 assign load = (EA == `OFF && !start_count_1 && !en_timer) ? 1 :
               (EA == `TRIGGER && !start_count_2 && !en_timer) ? 1 :
               (EA == `ON && !en_timer) ? 1 : 0;
@@ -80,7 +88,6 @@ assign en_disarm = (EA == `TRIGGER) ? 1 : 0;
 always @(posedge clock, posedge reset) begin
     if(reset) begin
         EA <= `SET;
-        has_p <= 0;
     end
     else
         EA <= PE;
@@ -144,7 +151,8 @@ always @(posedge clock, posedge reset) begin
         has_p <= 0;
     else begin
         if(EA == `SET && pd) has_p <= 1;
-        else if(EA == `OFF) has_p <= 0;
+        // else if(EA == `OFF) has_p <= 0;
+        else has_p <= 0;
     end 
 end
 

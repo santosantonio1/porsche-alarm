@@ -1,8 +1,8 @@
 `timescale 1ns / 1ps
 
 module dspl_drv_NexysA7(
-    input reset,
     input clock,
+    input reset,
     input [5:0] d1,
     input [5:0] d2,
     input [5:0] d3,
@@ -17,7 +17,7 @@ module dspl_drv_NexysA7(
     
     // seleciona o display a ser mostrado
     reg [2:0] selected;
-    always @(posedge clock) begin
+    always @(posedge clock, posedge reset) begin
         if(reset) begin
             selected <= 3'd0;
         end
@@ -79,7 +79,7 @@ module dspl_drv_NexysA7(
     reg timer1ms;
     reg [16:0] counter;
     
-    always @(posedge clock) begin
+    always @(posedge clock, posedge reset) begin
         if(reset) begin
             timer1ms <=  1'b0;
             counter  <= 17'd0;
