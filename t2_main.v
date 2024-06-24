@@ -4,10 +4,10 @@
 //--                             --
 //---------------------------------
 
-`define SET 0
-`define OFF 1
-`define TRIGGER 2
-`define ON 3
+`define SET 0               //Armado
+`define OFF 1               //Desarmado
+`define TRIGGER 2           //Acionando
+`define ON 3                //Fazendo 'barulho'
 
 //---------------------------------
 //--                             --
