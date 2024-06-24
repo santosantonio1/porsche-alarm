@@ -20,7 +20,7 @@ module top(
     input[1:0] time_select_param,
     input[3:0] time_value,
     output status, fuel_pump_status,
-    output siren
+    output [2:0] siren
 );
 
 //---------------------------------
