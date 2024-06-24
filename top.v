@@ -1,8 +1,20 @@
+//--------------------------------------------------------------------
+//--                                                                --
+//--                    D E F I N E S                               --
+//--                                                                --
+//--------------------------------------------------------------------
+
 `define SET 0
 `define OFF 1
 `define TRIGGER 2
 `define ON 3
 `define STOP_ALARM 4
+
+//--------------------------------------------------------------------
+//--                                                                --
+//--                           M O D U L E                          --
+//--                                                                --
+//--------------------------------------------------------------------
 
 module top(
     input clock, reset, ignition, d_door, p_door, switch, pedal,
@@ -11,9 +23,17 @@ module top(
     output[7:0] an, dec_cat
 );
 
+//Ig - Ignition; DD = DoorDriver; PD = Door Passenger; S = Switch; P = Break
 wire ig, dd, pd, s, p;
 
+//Times para serem atribuidos no Timer
 reg[3:0] T_ARM_DELAY, T_DRIVER_DELAY, T_PASSENGER_DELAY, T_ALARM_ON;
+
+//--------------------------------------------------------------------
+//--                                                                --
+//--                    D E B O U N C E R                           --
+//--                                                                --
+//--------------------------------------------------------------------
 
 debouncer DEB_IG(
     .clock(clock), .reset(reset), .noisy(ignition), .clean(ig)
@@ -35,13 +55,29 @@ debouncer DEB_P(
     clock, reset, pedal, p
 );
 
+
+//--------------------------------------------------------------------
+
+//Tempo que o DRIVER que Utiliza, Estado Atual, Próximo Estado
 reg[3:0] t, EA, PE;
+
+//Waited - Expired; 
 wire waited, load, en_timer, en_arm, en_disarm, start_count_1, start_count_2;
+
+
 wire start_count_3, en_triggered;
+
 wire[2:0] color;
 wire[3:0] t_display;
 
-reg has_p;
+reg has_p;      //Detector de Passageiro
+reg door_open;  //Detecta se uma porta abriu
+
+//--------------------------------------------------------------------
+//--                                                                --
+//--                         D R I V E R S                          --
+//--                                                                --
+//--------------------------------------------------------------------
 
 rgb RGB_DRIVER(
     color
@@ -73,6 +109,12 @@ dspl_drv_NexysA7 TIMER_DISPLAY(
     .an(an), .dec_cat(dec_cat)
 );
 
+//--------------------------------------------------------------------
+//--                                                                --
+//--                   A S S I G N S   01                           --
+//--                                                                --
+//--------------------------------------------------------------------
+
 assign load = (EA == `OFF && !start_count_1 && !en_timer) ? 1 :
               (EA == `TRIGGER && !start_count_2 && !en_timer) ? 1 :
               (EA == `ON && !en_timer) ? 1 : 0;
@@ -81,10 +123,18 @@ assign en_timer = (EA == `OFF && start_count_1) ? 1 :
                   (EA == `TRIGGER && start_count_2) ? 1 : 
                   (EA == `STOP_ALARM) ? 1 : 0;
                   
-// reduzir pra 1 en
+
 assign en_arm = (EA == `OFF) ? 1 : 0;
 assign en_disarm = (EA == `TRIGGER) ? 1 : 0;
 
+//--------------------------------------------------------------------
+//--                                                                --
+//--             F S M    P R A    A T U A L I Z A                  --
+//--                                                                --
+//--------------------------------------------------------------------
+
+
+//Always para poder atribuir: EA <= PE
 always @(posedge clock, posedge reset) begin
     if(reset) begin
         EA <= `SET;
@@ -93,6 +143,8 @@ always @(posedge clock, posedge reset) begin
         EA <= PE;
 end
 
+
+//Switch Case para atualizar a Maquina de Estado (PE)
 always @* begin
     case(EA) 
         `OFF:
@@ -100,13 +152,13 @@ always @* begin
             else PE <= `OFF;
 
         `SET:
-            if(dd || pd) PE <= `TRIGGER;
+            if(door_open) PE <= `TRIGGER;
             else PE <= `SET;
 
         `TRIGGER:
             if(ig) PE <= `OFF;
             else begin
-                if(waited) PE <= `ON;
+                if(waited) PE <= `ON;   //Waited é o equivalente ao Expired
                 else PE <= `TRIGGER;
             end
 
@@ -127,6 +179,7 @@ always @* begin
     endcase
 end
 
+//Process para poder fazer a atribuição de valores de tempos
 always @(posedge clock, posedge reset) begin
     if(reset)
     begin
@@ -146,16 +199,26 @@ always @(posedge clock, posedge reset) begin
         endcase
 end
 
+//Detector de Passageiro
 always @(posedge clock, posedge reset) begin
-    if(reset)
+    if(reset) begin
         has_p <= 0;
+        door_open <= 0;
+    end
     else begin
-        if(EA == `SET && pd) has_p <= 1;
-        // else if(EA == `OFF) has_p <= 0;
-        else has_p <= 0;
+        if(EA == `SET && (pd||dd)) begin
+             door_open <= 1; 
+             if(pd) has_p <= 1;
+             else has_p <= 0;
+        end
+        else begin 
+            has_p <= 0;
+            door_open <= 0;
+        end
     end 
 end
 
+//Outros Assigns
 assign set = (EA == `SET || EA == `TRIGGER) ? 1 : 0;
 // assign siren = (EA == `ON || EA == `STOP_ALARM) ? 1 : 0;
 assign siren = (EA == `ON || EA == `STOP_ALARM) ? color : 0;
