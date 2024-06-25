@@ -14,7 +14,8 @@ module top(
     input[1:0] time_select_param,
     input[3:0] time_value,
     output status, fuel_pump_status,
-    output[2:0] siren
+    output[2:0] siren,
+    output[7:0] an, dec_cat
 );
 
 reg[2:0] EA, PE, interval;
@@ -26,7 +27,6 @@ wire enable_siren;
 
 wire one_hz_enable, half_hz_enable, expired, start_timer, has_pass, arm;
 wire[3:0] value, value_display;
-wire[7:0] an, dec_cat;
 
 //-----------------------------------------------------------------------
 //      DEBOUNCERS
