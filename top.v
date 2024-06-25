@@ -2,6 +2,7 @@
 `define OFF 1
 `define TRIGGER 2
 `define ON 3
+`define STOP_ALARM 4
 
 `define WAIT_IGNITION_OFF 0
 `define WAIT_DOOR_OPEN 1
@@ -16,13 +17,16 @@ module top(
     output[2:0] siren
 );
 
-reg[1:0] EA, PE, interval;
+reg[2:0] EA, PE, interval;
 
-reg c_ignition, c_door_driver, c_door_pass, c_hidden_sw, c_pedal, c_reprogram;
-reg tsp1, tsp0, t3, t2, t1, t0, enable_siren;
+wire c_ignition, c_door_driver, c_door_pass, c_hidden_sw, c_pedal, c_reprogram;
+wire tsp1, tsp0, t3, t2, t1, t0; 
+// reg enable_siren;
+wire enable_siren;
 
 wire one_hz_enable, half_hz_enable, expired, start_timer, has_pass, arm;
 wire[3:0] value, value_display;
+wire[7:0] an, dec_cat;
 
 //-----------------------------------------------------------------------
 //      DEBOUNCERS
@@ -94,13 +98,17 @@ time_parameters TIME_CONTROL_DRIVER(
 timer TIMER_DRIVER(
     clock, reset, start_timer, value, expired, one_hz_enable, half_hz_enable, value_display
 );
+
+display DISPLAY_DRIVER(
+    clock, reset, {2'b10, EA, 1'b0}, 0, 0, {1'b1, 2'b00, tsp1, tsp0, 1'b0}, 
+    {1'b1, t3, t2, t1, t0, 1'b0}, 0, 0, {1'b1, value_display, 1'b0}, dec_cat, an
+);
 //-------------------------------------------------------------------------------------------------------------
 
 always @(posedge clock, posedge reset)
 begin
     if(reset) begin
         EA <= `SET;
-        enable_siren <= 0;
     end else begin
         EA <= PE;
     end
@@ -108,14 +116,14 @@ end
 
 always @*
 begin
-    if(c_reprogram) begin
-        PE <= `SET;
-    end else begin
+    // if(c_reprogram) begin
+    //     PE <= `SET;
+    // end else begin
         case(EA)
             `SET:
-                if(c_ignition)                      PE <= `OFF;
+                if(c_ignition)                          PE <= `OFF;
                 else if(c_door_driver || c_door_pass)   PE <= `TRIGGER;
-                else                                PE <= `SET;
+                else                                    PE <= `SET;
             
             `OFF:
                 if(arm && expired)  PE <= `SET;
@@ -127,9 +135,19 @@ begin
                 else                PE <= `TRIGGER;
 
             `ON:
-        
+                if(c_ignition)  PE <= `OFF;
+                else if(!c_door_driver && !c_door_pass)     PE <= `STOP_ALARM;
+                else PE <= `ON;
+
+            `STOP_ALARM:
+                if(c_ignition)  PE <= `OFF;
+                else if(c_door_driver || c_door_pass)    PE <= `ON;
+                else if(expired)    PE <= `OFF;
+                else    PE <= `STOP_ALARM;
+
+            default:    PE <= `SET;
         endcase
-    end
+    // end
 end
 
 always @(posedge clock, posedge reset)
@@ -162,30 +180,35 @@ always @*
 begin
     case(ARM_EA)
         `WAIT_DOOR_OPEN:
-            if(!c_ignition)     PE <= `WAIT_DOOR_OPEN;
-            else    PE <= `WAIT_IGNITION_OFF;
+            if(!c_ignition)     ARM_PE <= `WAIT_DOOR_OPEN;
+            else    ARM_PE <= `WAIT_IGNITION_OFF;
         
         `WAIT_DOOR_OPEN:
-            if(c_ignition)      PE <= `WAIT_IGNITION_OFF;
-            else if(c_door_driver)   PE <= `WAIT_DOOR_CLOSE;
-            else    PE <= `WAIT_D_OPEN;
+            if(c_ignition)      ARM_PE <= `WAIT_IGNITION_OFF;
+            else if(c_door_driver)   ARM_PE <= `WAIT_DOOR_CLOSE;
+            else    ARM_PE <= `WAIT_DOOR_OPEN;
 
         `WAIT_DOOR_CLOSE:
-            if(!c_door_driver && !c_door_pass)  PE <= `SET_ALARM;
-            else    PE <= `WAIT_DOOR_CLOSE;
+            if(!c_door_driver && !c_door_pass)  ARM_PE <= `START_ARM_DELAY;
+            else    ARM_PE <= `WAIT_DOOR_CLOSE;
 
         `START_ARM_DELAY:
-            if(c_door_driver || c_door_pass)    PE <= `WAIT_DOOR_CLOSE;
-            else    PE <= `SET_ALARM;
+            if(c_door_driver || c_door_pass)    ARM_PE <= `WAIT_DOOR_CLOSE;
+            else    ARM_PE <= `START_ARM_DELAY;
 
     endcase
 end
 
 assign start_timer = (EA == `SET && (c_door_driver || c_door_pass)) ||
-                     (EA == `OFF && ARM_EA == `WAIT_DOOR_CLOSE && ARM_PE == `START_ARM_DELAY);
+                     (EA == `OFF && ARM_EA == `WAIT_DOOR_CLOSE && ARM_PE == `START_ARM_DELAY) ||
+                     (EA == `ON && PE == `STOP_ALARM);
 
 assign has_pass = (EA == `SET && c_door_pass);
 
 assign arm = (ARM_EA == `START_ARM_DELAY);
+
+assign status = (EA == `SET);
+
+assign enable_siren = (EA == `ON);
 
 endmodule
