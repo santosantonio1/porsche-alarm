@@ -8,6 +8,7 @@
 `define OFF 1               //Desarmado
 `define TRIGGER 2           //Acionando
 `define ON 3                //Fazendo 'barulho'
+`define STOP_ALARM 4        //Estado que dura 1 Clock para cancelar o 'Alarm'   
 
 `define DOOR_CLOSED       2'b00
 `define DOOR_OPEN         2'b01
@@ -222,6 +223,15 @@ always @* begin
                 else PE <= `TRIGGER;
 
             `ON:            //Tá ligado, BRUHHHHHHHHH           (Ativar Alarme)
+                if(c_ignition)  PE <= `OFF;
+                else if(!c_door_driver && !c_door_pass)     PE <= `STOP_ALARM;
+                else PE <= `ON;
+
+            `STOP_ALARM:
+                if(c_ignition)  PE <= `OFF;
+                else if(c_door_driver || c_door_pass)    PE <= `ON;
+                else if(expired)    PE <= `OFF;
+                else    PE <= `STOP_ALARM;
 
             default:
         endcase
@@ -299,8 +309,9 @@ end
 //--                             --
 //---------------------------------
 
-assign start_timer = ((EA == `SET && (door_driver || door_pass)) ||
-                      (EA == `OFF && D_PE ==  3'd2));
+assign start_timer = ((EA == `SET && (c_door_driver || c_door_pass)) ||
+                      (EA == `OFF && D_PE ==  3'd2)              || 
+                      (EA == `ON && PE == `STOP_ALARM));
 
 assign has_pass = (EA == `SET && door_pass);
 
