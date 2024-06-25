@@ -20,7 +20,7 @@ module top(
     input[1:0] time_select_param,
     input[3:0] time_value,
     output status, fuel_pump_status,
-    output [2:0] siren
+    output[2:0] siren
 );
 
 //---------------------------------
@@ -39,8 +39,11 @@ module top(
     //Register for Interval
     reg [1:0] interval;
 
+    //Register to Enable Siren
+    reg enable_siren;
+    wire half_hz_enable;
+
     //Wires
-    wire siren_color;
     wire [3:0] value;
 
 //---------------------------------
@@ -113,10 +116,16 @@ time_parameters TIME_PARAMETERS_DRIVER(
     clock, reset, time_param_sel, time_value, reprogram, interval, value
 );
 
-rgb SIREN_DRIVER(
-    siren_color
+siren_generator SIREN_GENERATOR_DRIVER(
+    enable_siren, half_hz_enable, siren
 );
 
 //-----------------------------------------------------------------------
+
+//---------------------------------
+//--                             --
+//--       F S M - T O P         --
+//--                             --
+//---------------------------------
 
 endmodule
