@@ -46,6 +46,8 @@ module top(
     //Register to Enable Siren
     reg enable_siren;
     wire half_hz_enable;
+    wire one_hz_enable;
+    wire has_pass;
 
     //Wires
     wire [3:0] value;
@@ -142,7 +144,7 @@ always @(posedge clock, posedge reset) begin
     if(reset) begin     
         EA <= `SET;
         D_EA <= 2'b0;       //Disarm_EA
-
+        enable_siren <= 0;
         EA_DD <= 2'b0;
         EA_DP <= 2'b0;
     end else begin
@@ -153,6 +155,21 @@ always @(posedge clock, posedge reset) begin
         EA_DP <= PE_DP;
     end 
 end 
+
+always @(posedge clock, posedge reset)
+begin
+    if(reset) begin
+        interval <= 1;
+    end else begin
+        case(EA) 
+            `SET:   if(has_pass) interval <= 2; 
+                    else interval <= 1;
+            `OFF:       interval <= 0;
+            `ON:        interval <= 3;
+            default:    interval <= 1; 
+        endcase
+    end
+end
 
 //---------------------------------------------------------------------------------------------------
 //--                            
@@ -184,8 +201,6 @@ end
                                                         
 //---------------------------------------------------------------------------------------------------
 
-//Alteração da Nossa FSM Principal, a TOP
-    
 always @* begin
     if(c_reprogram) begin 
         PE <= `SET;             //Se o C_Reprogram Ativar, significa que vai direto para Armado
@@ -198,7 +213,7 @@ always @* begin
                 else PE <= `SET;
                     
             `OFF:           //Desarmado     
-                if(signalDisarm_To_Arm == 1) PE <= `SET;
+                if(signalDisarm_To_Arm == 1 && expired == 1) PE <= `SET;
                 else PE <= `OFF;
 
             `TRIGGER:       //Acionando (Contando para Acionar) (Acionado)
@@ -214,24 +229,36 @@ always @* begin
 end
 
 //---------------------------------------------------------------------------------------------------
-                
+
 //FSM para Poder atualizar o OFF
 reg [2:0] D_EA;
 reg [2:0] D_PE;
 
 reg signalDisarm_To_Arm;
 
+//---------------------------------
+//--                             --
+//--    DETECT - DISARM OKAY     --
+//--                             --
+//---------------------------------
+
 always @(posedge clock, posedge reset) begin
     if(reset) begin
         signalDisarm_To_Arm <= 0;
     end else begin
-        if(D_EA == 3'd4) begin
+        if(D_EA == 3'd3) begin
             signalDisarm_To_Arm <= 1;
         end else begin
             signalDisarm_To_Arm <= 0;
         end
     end
 end
+
+//---------------------------------
+//--                             --
+//--       F S M  -  DISARM      --
+//--                             --
+//---------------------------------
 
 always @* begin
     if(EA != `OFF && c_reprogram == 0) begin
@@ -242,32 +269,39 @@ always @* begin
             3'd0:  D_PE <= 3'd1;
 
             3'd1:  begin
-                if(ignition == 1'd1) D_PE <= 3'd1;
+                if(c_ignition == 1'd1) D_PE <= 3'd1;
                 else D_PE <= 3'd2;
             end
             3'd2:
-                if(ignition == 1'd1) D_PE <= 3'd1; else
+                if(c_ignition == 1'd1) D_PE <= 3'd1; else
                 begin
                     if(EA_DD == `DOOR_CLOSED_AGAIN) D_PE <= 3'd3;
                     else D_PE <= 3'd2;
                 end
 
             3'd3:
-                if(ignition == 1'd1) D_PE <= 3'd1; else
+                if(c_ignition == 1'd1) D_PE <= 3'd1; else
                 begin
-                   if(EA_DD == `DOOR_OPEN) D_PE <= 3'd2;
+                   if(EA_DD == `DOOR_OPEN || EA_DP == `DOOR_OPEN) D_PE <= 3'd2;
                    else begin
-                     if(expired == 1'b1) D_PE <= 3'd4;
+                     if(expired == 1'b1) D_PE <= 3'd0;
                      else D_PE <= 3'd3;
                    end
                 end
-
-            3'd4:
-                D_PE <= 3'd0;
-
             default: D_PE <= 3'b0;
         endcase
     end
 end
+
+//---------------------------------
+//--                             --
+//--       A S S I G N s         --
+//--                             --
+//---------------------------------
+
+assign start_timer = ((EA == `SET && (door_driver || door_pass)) ||
+                      (EA == `OFF && D_PE ==  3'd2));
+
+assign has_pass = (EA == `SET && door_pass);
 
 endmodule
