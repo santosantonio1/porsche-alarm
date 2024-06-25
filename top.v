@@ -100,8 +100,9 @@ timer TIMER_DRIVER(
 );
 
 display DISPLAY_DRIVER(
-    clock, reset, {2'b10, EA, 1'b0}, 0, 0, {1'b1, 2'b00, tsp1, tsp0, 1'b0}, 
-    {1'b1, t3, t2, t1, t0, 1'b0}, 0, 0, {1'b1, value_display, 1'b0}, dec_cat, an
+    .clock(clock), .reset(reset), .d1({1'b1, 1'b0, EA, 1'b0}), .d2(0), .d3(0),
+    .d4(0), .d5(0), .d6(0), .d7(0), .d8({1'b1, value_display, 1'b0}),
+    .an(an), .dec_cat(dec_cat)
 );
 //-------------------------------------------------------------------------------------------------------------
 
@@ -121,23 +122,34 @@ begin
     // end else begin
         case(EA)
             `SET: begin
-                if(c_ignition)     begin                     PE <= `OFF; end
-                else begin if(c_door_driver || c_door_pass)   PE <= `TRIGGER; end
-                else  begin                                  PE <= `SET; end
+                if(c_ignition) begin                     
+                    PE <= `OFF; 
+                end else begin 
+                    if(c_door_driver || c_door_pass) begin
+                        PE <= `TRIGGER; 
+                    end else  begin
+                        PE <= `SET; 
+                    end
+                end
             end
             `OFF: begin
-                if(arm && expired) begin  PE <= `SET; end
-                else begin PE <= `OFF; end
+                if(arm && expired) begin  
+                    PE <= `SET; 
+                end else begin 
+                    PE <= `OFF; 
+                end
             end
             `TRIGGER: begin
-                if(c_ignition)   begin   PE <= `OFF; end
+                if(c_ignition) begin
+                    PE <= `OFF; 
+                end
                 else begin 
                     if(expired) begin   
                         PE <= `ON; 
                     end
-                else  begin             
-                    PE <= `TRIGGER;
-                end
+                    else  begin             
+                        PE <= `TRIGGER;
+                    end
                 end
             end
             `ON: begin
