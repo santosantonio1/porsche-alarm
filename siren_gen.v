@@ -3,7 +3,7 @@ module siren_generator(
     output[2:0] siren
 );
 
-assign siren = (enable_siren) ? 3'b001 :
-               (half_hz_enable) ? 3'b1000 : 0;
+assign siren = (enable_siren && half_hz_enable) ? 3'b001 :
+               (enable_siren && !half_hz_enable) ? 3'b100 : 0;
 
 endmodule
