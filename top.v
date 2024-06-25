@@ -14,9 +14,9 @@ module top(
 reg[1:0] EA, PE, interval;
 
 reg c_ignition, c_door_driver, c_door_pass, c_hidden_sw, c_pedal, c_reprogram;
-reg tsp1, tsp0, t3, t2, t1, t0;
+reg tsp1, tsp0, t3, t2, t1, t0, enable_siren;
 
-wire siren_color;
+wire half_hz_enable;
 wire[3:0] value;
 
 //-----------------------------------------------------------------------
@@ -75,8 +75,8 @@ fuel_pump FUEL_PUMP_DRIVER(
     clock, reset, c_ignition, c_hidden_sw, c_pedal, fuel_pump_status
 );
 
-rgb SIREN_DRIVER(
-    siren_color
+siren_generator SIREN_GENERATOR_DRIVER(
+    enable_siren, half_hz_enable, siren
 );
 
 time_parameters TIME_CONTROL_DRIVER(

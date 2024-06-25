@@ -1,4 +1,4 @@
-```//---------------------------------
+//---------------------------------
 //--                             --
 //--       D E F I N E S         --
 //--                             --
@@ -78,10 +78,10 @@ end
 //--                             --
 //---------------------------------
 
-assign value  =  (interval == `T_ARM_DELAY       )? T_ARM_DELAY      :
-                 (interval == `T_DRIVER_DELAY    )? T_DRIVER_DELAY   :
-                 (interval == `T_PASSENGER_DELAY)? T_PASSENGER_DELAY: 
-                 (interval == `T_ALARM_ON       )? T_ALARM_ON : 4'b0000;
+assign value  =  (interval == `T_ARM_DELAY) ? T_ARM_DELAY :
+                 (interval == `T_DRIVER_DELAY) ? T_DRIVER_DELAY :
+                 (interval == `T_PASSENGER_DELAY) ? T_PASSENGER_DELAY : 
+                 (interval == `T_ALARM_ON)? T_ALARM_ON : 4'b0000;
 
 
-endmodule```
+endmodule
