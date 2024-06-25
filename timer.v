@@ -4,10 +4,6 @@
 //--                             --
 //---------------------------------
 //--    
-//--    -> Segundo a implementação, temos um Clock de 100 MHz, ou seja,
-//-- 1 segundo = 100.000.000 ciclos de Clock. Para fazer testes, será
-//-- usado a lógica 1 segundo = 10 clicos de Clock <Por enquanto>
-//--
 //---------------------------------
 
 //---------------------------------
@@ -40,7 +36,10 @@ module timer(
 //--                             --
 //---------------------------------
 
-reg EA, PE;          // Estado Atual - Proxime Estado
+reg [30:0] t;       //Timer to later convert to Second
+
+reg ohze;           //One Hz Enable
+reg [3:0] contador_interno; //Contador Interno
 
 //---------------------------------
 //--                             --
@@ -54,18 +53,37 @@ reg EA, PE;          // Estado Atual - Proxime Estado
 //--                             --
 //---------------------------------
 
-//Process padrão para a atualização da FSM
-
-//Process de operações durante a minha FSM
-
-//FSM
+//Always responsável pela redução dos ciclos do T e também da inicialização
+always @(posedge clock, posedge reset)
+begin
+    if(reset) begin
+        t <= 30'b0;
+        contador_interno <= 4'b0;
+    end else begin
+        if(start_timer) begin
+            t <= 0;
+            contador_interno <= value;
+        end else begin
+            if(contador_interno > 0) begin 
+                if(t < 100_000_000) begin  
+                    t <= t + 1;
+                    ohze <= 0;
+                end else begin             
+                    t <= 0;
+                    ohze <= 1;
+                    contador_interno <= contador_interno - 1;
+                end                        
+            end
+        end
+    end
+end
 
 //---------------------------------
 //--                             --
 //--       A S S I G N s         --
 //--                             --
 //---------------------------------
-
-
+assign expired = (contador_interno <= 0)? 1 : 0;
+assign one_hz_enable = ohze;
 
 endmodule
