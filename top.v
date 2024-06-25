@@ -120,30 +120,44 @@ begin
     //     PE <= `SET;
     // end else begin
         case(EA)
-            `SET:
-                if(c_ignition)                          PE <= `OFF;
-                else if(c_door_driver || c_door_pass)   PE <= `TRIGGER;
-                else                                    PE <= `SET;
-            
-            `OFF:
-                if(arm && expired)  PE <= `SET;
-                else PE <= `OFF;
-            
-            `TRIGGER:
-                if(c_ignition)      PE <= `OFF;
-                else if(expired)    PE <= `ON;
-                else                PE <= `TRIGGER;
+            `SET: begin
+                if(c_ignition)     begin                     PE <= `OFF; end
+                else begin if(c_door_driver || c_door_pass)   PE <= `TRIGGER; end
+                else  begin                                  PE <= `SET; end
+            end
+            `OFF: begin
+                if(arm && expired) begin  PE <= `SET; end
+                else begin PE <= `OFF; end
+            end
+            `TRIGGER: begin
+                if(c_ignition)   begin   PE <= `OFF; end
+                else begin 
+                    if(expired) begin   
+                        PE <= `ON; 
+                    end
+                else  begin             
+                    PE <= `TRIGGER;
+                end
+                end
+            end
+            `ON: begin
+                if(c_ignition)  begin
+                    PE <= `OFF;
+                end else begin
+                    if(!c_door_driver && !c_door_pass) begin     
+                        PE <= `STOP_ALARM;
+                        end else begin
+                        PE <= `ON;
+                        end
+                    end
+                end
 
-            `ON:
-                if(c_ignition)  PE <= `OFF;
-                else if(!c_door_driver && !c_door_pass)     PE <= `STOP_ALARM;
-                else PE <= `ON;
-
-            `STOP_ALARM:
-                if(c_ignition)  PE <= `OFF;
-                else if(c_door_driver || c_door_pass)    PE <= `ON;
-                else if(expired)    PE <= `OFF;
-                else    PE <= `STOP_ALARM;
+            `STOP_ALARM: begin
+                if(c_ignition)  begin PE <= `OFF; end
+                else if(c_door_driver || c_door_pass) begin   PE <= `ON; end
+                else if(expired) begin   PE <= `OFF; end
+                else   begin PE <= `STOP_ALARM; end
+            end
 
             default:    PE <= `SET;
         endcase
