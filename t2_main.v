@@ -4,15 +4,16 @@
 //--                             --
 //---------------------------------
 
-`define SET 0               //Armado
-`define OFF 1               //Desarmado
-`define TRIGGER 2           //Acionando
-`define ON 3                //Fazendo 'barulho'
-`define STOP_ALARM 4        //Estado que dura 1 Clock para cancelar o 'Alarm'   
+`define SET 0
+`define OFF 1
+`define TRIGGER 2
+`define ON 3
+`define STOP_ALARM 4
 
-`define DOOR_CLOSED       2'b00
-`define DOOR_OPEN         2'b01
-`define DOOR_CLOSED_AGAIN 2'b10
+`define WAIT_IGNITION_OFF 0
+`define WAIT_DOOR_OPEN 1
+`define WAIT_DOOR_CLOSE 2
+`define START_ARM_DELAY 3
 
 //---------------------------------
 //--                             --
@@ -25,38 +26,42 @@ module top(
     input[1:0] time_select_param,
     input[3:0] time_value,
     output status, fuel_pump_status,
-    output[2:0] siren
+    output[2:0] siren,
+    output[7:0] an, dec_cat
 );
 
 //---------------------------------
 //--                             --
-//--   R E G I S T E R S         --
+//--     R E G I S T E R S       --
 //--                             --
 //---------------------------------
 
-    //FSM States Update
-    reg[1:0] EA, PE;
+//Registradores para poder controlar a FSM principal
+reg[2:0] EA, PE;
 
-    //Debouncers Outputs
-    reg c_ignition, c_door_driver, c_door_pass, c_hidden_sw, c_pedal, c_reprogram;
-    reg tsp1, tsp0, t3, t2, t1, t0;
+//Registrador que é responsável por mandar o Intervalo que vai ser utilizado pelo Time_Parameters
+reg[2:0] interval;
 
-    //Register for Interval
-    reg [1:0] interval;
+//Wires conectados nos Debouncers
+wire c_ignition, c_door_driver, c_door_pass, c_hidden_sw, c_pedal, c_reprogram;
+wire tsp1, tsp0, t3, t2, t1, t0; 
 
-    //Register to Enable Siren
-    reg enable_siren;
-    wire half_hz_enable;
-    wire one_hz_enable;
-    wire has_pass;
+//Wire conectado com a entrada do Driver Siren_Generator
+wire enable_siren;
 
-    //Wires
-    wire [3:0] value;
-    wire [3:0] value_display;
+reg enable_siren_register;      // Registrador que recebe enable_siren
+reg half_hz_register;           // Periodo de 1 Segundos
+reg one_hz_register;            // Periodo de 2 Segundos
+
+//Wires que se conectam com o Driver de Tempo
+wire one_hz_enable, half_hz_enable, expired, start_timer;
+
+//Wires conectado com o value para conectar no Driver de Tempo. E o Value_Display para "Debuggar" na FPGA
+wire[3:0] value, value_display;
 
 //---------------------------------
 //--                             --
-//--   D E B O U N C E R S       --
+//--    D E B O U N C E R S      --
 //--                             --
 //---------------------------------
 
@@ -107,12 +112,11 @@ debouncer DEB_TIME_VALUE_1(
 debouncer DEB_TIME_VALUE_0(
     clock, reset, time_value[0], t0
 );
-
 //-----------------------------------------------------------------------
 
 //---------------------------------
 //--                             --
-//--         D R I V E R S       --
+//--       D R I V E R S         --
 //--                             --
 //---------------------------------
 
@@ -120,188 +124,226 @@ fuel_pump FUEL_PUMP_DRIVER(
     clock, reset, c_ignition, c_hidden_sw, c_pedal, fuel_pump_status
 );
 
-time_parameters TIME_PARAMETERS_DRIVER(
-    clock, reset, time_param_sel, time_value, reprogram, interval, value
+siren_generator SIREN_GENERATOR_DRIVER(
+    enable_siren, half_hz_register, siren
 );
 
-siren_generator SIREN_GENERATOR_DRIVER(
-    enable_siren, half_hz_enable, siren
+time_parameters TIME_CONTROL_DRIVER(
+    clock, reset, {tsp1, tsp0}, {t3, t2, t1, t0}, c_reprogram, interval, value
 );
 
 timer TIMER_DRIVER(
-    clock, reset, start_timer, value, expired, one_hz_enable, half_hz_enable, value_display
+    .clock(clock), .reset(reset), .start_timer(start_timer), 
+    .value(value), .expired(expired), .one_hz_enable(one_hz_enable),
+    .half_hz_enable(half_hz_enable), 
+    .value_display(value_display)
 );
 
-//-----------------------------------------------------------------------
+display DISPLAY_DRIVER(
+    .clock(clock), .reset(reset), 
+    .d1({1'b1, 1'b0, EA, 1'b0}), 
+    .d2({1'b1, 3'b000, expired, 1'b0}), 
+    .d3({1'b1, 1'b0, ARM_EA, 1'b0}),
+    .d4({1'b1, 2'b0, {tsp1, tsp0}, 1'b0}), 
+    .d5({1'b1, {t3,t2,t1,t0}, 1'b0}), 
+    .d6(0), 
+    .d7(0), 
+    .d8({1'b1, value_display, 1'b0}),
+    .an(an), .dec_cat(dec_cat)
+);
+//-------------------------------------------------------------------------------------------------------------
 
 //---------------------------------
 //--                             --
-//--            F S M            --
+//--  F S M   -  P R O C E S S   --
 //--                             --
 //---------------------------------
 
-//Inicialização Padrão da FSM
-always @(posedge clock, posedge reset) begin
-    if(reset) begin     
-        EA <= `SET;
-        D_EA <= 2'b0;       //Disarm_EA
-        enable_siren <= 0;
-        EA_DD <= 2'b0;
-        EA_DP <= 2'b0;
-    end else begin
-        EA <= PE;
-        D_EA <= D_PE;       //Disarm_PE
-
-        EA_DD <= PE_DD;
-        EA_DP <= PE_DP;
-    end 
-end 
-
+//Atualiza a Maquina de Estados Principais (Estado "Inicial" é Armado)
 always @(posedge clock, posedge reset)
 begin
     if(reset) begin
-        interval <= 1;
+        EA <= `SET;
     end else begin
-        case(EA) 
-            `SET:   if(has_pass) interval <= 2; 
-                    else interval <= 1;
-            `OFF:       interval <= 0;
-            `ON:        interval <= 3;
-            default:    interval <= 1; 
-        endcase
+        EA <= PE;
     end
 end
-
-//---------------------------------------------------------------------------------------------------
-//--                            
-//--            D E T E C Ç Ã O     -   A B R E    E    F E C H A       
-//--                             
-//---------------------------------------------------------------------------------------------------
-
-reg[1:0] EA_DD;     //Estado Atual Motorista
-reg[1:0] PE_DD;     //Proximo Estado Motorista
-
-reg[1:0] EA_DP;     //Estado Atual   Passageiro
-reg[1:0] PE_DP;     //Proximo Estado Passageiro
-
-always@* begin
-    case(EA_DD)
-        `DOOR_CLOSED:  if(door_driver == 1'b1) PE_DD = `DOOR_OPEN; else PE_DD = `DOOR_CLOSED;
-        `DOOR_OPEN:    if(door_driver == 1'b0) PE_DD = `DOOR_CLOSED; else PE_DD = `DOOR_CLOSED;
-        `DOOR_CLOSED_AGAIN: PE_DD = `DOOR_CLOSED;
-        default: PE_DD = `DOOR_CLOSED;
-    endcase
-
-    case(EA_DP)
-        `DOOR_CLOSED:  if(door_pass == 1'b1) PE_DP = `DOOR_OPEN; else PE_DP = `DOOR_CLOSED;
-        `DOOR_OPEN:    if(door_pass == 1'b0) PE_DP = `DOOR_CLOSED; else PE_DP = `DOOR_CLOSED;
-        `DOOR_CLOSED_AGAIN: PE_DP = `DOOR_CLOSED;
-        default: PE_DP = `DOOR_CLOSED;
-    endcase
-end
-                                                        
-//---------------------------------------------------------------------------------------------------
-
-always @* begin
-    if(c_reprogram) begin 
-        PE <= `SET;             //Se o C_Reprogram Ativar, significa que vai direto para Armado
-    end
-    else begin
-        case(EA)
-            `SET:           //Armado
-                if(c_ignition) PE <= `OFF;
-                else if(c_door_driver == 1 ||c_door_pass == 1) PE <= `TRIGGER;
-                else PE <= `SET;
-                    
-            `OFF:           //Desarmado     
-                if(signalDisarm_To_Arm == 1 && expired == 1) PE <= `SET;
-                else PE <= `OFF;
-
-            `TRIGGER:       //Acionando (Contando para Acionar) (Acionado)
-                if(c_ignition) PE <= `OFF;
-                else if(expired) PE <= `ON;
-                else PE <= `TRIGGER;
-
-            `ON:            //Tá ligado, BRUHHHHHHHHH           (Ativar Alarme)
-                if(c_ignition)  PE <= `OFF;
-                else if(!c_door_driver && !c_door_pass)     PE <= `STOP_ALARM;
-                else PE <= `ON;
-
-            `STOP_ALARM:
-                if(c_ignition)  PE <= `OFF;
-                else if(c_door_driver || c_door_pass)    PE <= `ON;
-                else if(expired)    PE <= `OFF;
-                else    PE <= `STOP_ALARM;
-
-            default:
-        endcase
-    end
-end
-
-//---------------------------------------------------------------------------------------------------
-
-//FSM para Poder atualizar o OFF
-reg [2:0] D_EA;
-reg [2:0] D_PE;
-
-reg signalDisarm_To_Arm;
-
-//---------------------------------
-//--                             --
-//--    DETECT - DISARM OKAY     --
-//--                             --
-//---------------------------------
 
 always @(posedge clock, posedge reset) begin
     if(reset) begin
-        signalDisarm_To_Arm <= 0;
+        half_hz_register <= 0;
+        one_hz_register <= 0;
     end else begin
-        if(D_EA == 3'd3) begin
-            signalDisarm_To_Arm <= 1;
-        end else begin
-            signalDisarm_To_Arm <= 0;
-        end
+        if(one_hz_enable) begin one_hz_register <= ! one_hz_register; end
+ 
+        if(half_hz_enable) begin half_hz_register <= ! half_hz_register; end
     end
-end
+end 
 
-//---------------------------------
-//--                             --
-//--       F S M  -  DISARM      --
-//--                             --
-//---------------------------------
-
-always @* begin
-    if(EA != `OFF && c_reprogram == 0) begin
-        D_PE <= 3'b0;
-    end 
-    else begin  
-        case(D_EA)
-            3'd0:  D_PE <= 3'd1;
-
-            3'd1:  begin
-                if(c_ignition == 1'd1) D_PE <= 3'd1;
-                else D_PE <= 3'd2;
+//Atualiza o PE que será recebido pelo EA (Ou seja, atualizador de Próximo Estado)
+always @*
+begin
+    if(c_reprogram) begin
+        PE <= `SET;
+    end else begin
+        case(EA)
+            `SET: begin //Estado de Armado: C_IGNITION (Desarma Sempre) || C_DOOR_DRIVER or C_DOOR_PASS (Vai para o Estado de tempo que espera a Ignição)
+                if(c_ignition) begin                     
+                    PE <= `OFF; 
+                end else begin 
+                    if(c_door_driver || c_door_pass)
+                        PE <= 3'd5; 
+                    else 
+                        PE <= `SET; 
+                end
             end
-            3'd2:
-                if(c_ignition == 1'd1) D_PE <= 3'd1; else
-                begin
-                    if(EA_DD == `DOOR_CLOSED_AGAIN) D_PE <= 3'd3;
-                    else D_PE <= 3'd2;
+
+            `OFF: begin
+                if(ARM_EA == 3'd4 && expired && !c_ignition) begin  
+                    PE <= `SET; 
+                end else begin 
+                    PE <= `OFF; 
+                end
+            end
+
+            `TRIGGER: begin
+                if(c_ignition) begin
+                    PE <= `OFF; 
+                end
+                else begin 
+                    if(expired) begin   
+                        PE <= 3'd6; 
+                    end
+                    else  begin             
+                        PE <= `TRIGGER;
+                    end
+                end
+            end
+
+            `ON: begin
+                if(c_ignition)  begin
+                    PE <= `OFF;
+                end else begin
+                    if(!c_door_driver && !c_door_pass) begin     
+                        PE <= `STOP_ALARM;
+                    end else begin
+                        PE <= 3'd6;
+                        end
+                    end
                 end
 
-            3'd3:
-                if(c_ignition == 1'd1) D_PE <= 3'd1; else
-                begin
-                   if(EA_DD == `DOOR_OPEN || EA_DP == `DOOR_OPEN) D_PE <= 3'd2;
-                   else begin
-                     if(expired == 1'b1) D_PE <= 3'd0;
-                     else D_PE <= 3'd3;
-                   end
-                end
-            default: D_PE <= 3'b0;
+            `STOP_ALARM: begin
+                if(c_ignition)  begin PE <= `OFF; end
+                else if(c_door_driver || c_door_pass) begin   PE <= `ON; end
+                else if(expired) begin   PE <= `SET; end
+                else   begin PE <= `STOP_ALARM; end
+            end
+
+            3'd5: begin
+                PE <= `TRIGGER;
+            end
+
+            3'd6: begin
+                //Ir para o estado de Ativa Alarme
+                PE <= `ON;
+            end
+
+            default:    PE <= `SET;
         endcase
     end
 end
+
+//---------------------------------
+//--                             --
+//--   Value's of Interval       --
+//--                             --
+//---------------------------------
+
+//Always responsável pela inserção do valor de "Intervalo" no Timer_Driver
+always @(posedge clock, posedge reset)
+begin
+    if(reset) begin
+        interval <= 1; // T_DRIVER_DELAY    
+    end else begin
+        case(EA) 
+            `SET:   begin                                           //Armado
+                    if(c_door_pass) 
+                        interval <= 2; //T_PASS_DELAY   
+                    else 
+                        interval <= 1; //T_DRIVER_DELAY
+            end
+
+            `OFF:     begin  interval <= 0; end                     //Desarmado - T_ARM_DELAY
+
+            `ON:      begin  interval <= 3; end     //Estado 5      //Ativar_Alarme - T_ALARM_ON
+
+            `STOP_ALARM: begin interval <= 3; end   //Estado 4  - T_ALARM_ON
+
+            `TRIGGER: begin interval <= 3; end                      //Acionado - T_ALARM_ON
+
+            default:  begin interval <= 1;  end                     // T_DRIVER_DELAY (Como Default)
+        endcase
+    end
+end
+
+//-------------------------------------------------
+//--                             
+//--     State of ARM_EA (FSM do Armado)       
+//--                             
+//-------------------------------------------------
+
+//Registrador para controlar essa FSM Paralela
+reg[2:0] ARM_EA, ARM_PE;
+
+//Atualiza o Estado_Atual do Detector de Armar
+always @(posedge clock, posedge reset)
+begin
+    if(reset) begin
+        ARM_EA <= `WAIT_IGNITION_OFF;
+    end else begin
+        ARM_EA <= ARM_PE;
+    end
+end
+
+//Condições de troca para o ARM_PE (Importante para detecção)
+always @* begin
+case(ARM_EA)
+        `WAIT_IGNITION_OFF:
+            if(!c_ignition)     ARM_PE <= `WAIT_DOOR_OPEN;
+            else    ARM_PE <= `WAIT_IGNITION_OFF;
+        
+        `WAIT_DOOR_OPEN:
+            if(c_ignition)      ARM_PE <= `WAIT_IGNITION_OFF;
+            else if(c_door_driver)   ARM_PE <= `WAIT_DOOR_CLOSE;
+            else    ARM_PE <= `WAIT_DOOR_OPEN;
+
+        `WAIT_DOOR_CLOSE:
+            if(!c_door_driver && !c_door_pass)  ARM_PE <= `START_ARM_DELAY;
+            else    ARM_PE <= `WAIT_DOOR_CLOSE;
+
+        `START_ARM_DELAY: begin
+                ARM_PE <= 3'd4;
+        end
+
+        3'd4: begin
+            if(c_ignition) ARM_PE <= `WAIT_IGNITION_OFF; 
+            else begin
+            if(expired) begin ARM_PE <= 3'd5; end
+            else begin
+                if(c_door_driver || c_door_pass) begin ARM_PE <= `WAIT_DOOR_CLOSE; end 
+                else ARM_PE <= 3'd4;
+            end
+        end
+        end
+
+        3'd5:
+            ARM_PE <= 3'd0;
+            
+        default: ARM_PE <= `WAIT_DOOR_OPEN;
+    endcase
+end
+
+//-------------------------------------------------------------------------------------------------------------
 
 //---------------------------------
 //--                             --
@@ -309,10 +351,14 @@ end
 //--                             --
 //---------------------------------
 
-assign start_timer = ((EA == `SET && (c_door_driver || c_door_pass)) ||
-                      (EA == `OFF && D_PE ==  3'd2)              || 
-                      (EA == `ON && PE == `STOP_ALARM));
+assign start_timer = (EA == `SET && (c_door_driver || c_door_pass)) ||
+                     (EA == `OFF && ARM_EA == `START_ARM_DELAY) ||
+                     //(EA == `ON && PE == `STOP_ALARM) || 
+                     (EA == 3'd5) ||
+                     (EA == 3'd6);
 
-assign has_pass = (EA == `SET && door_pass);
+assign status = ((EA == `SET && (one_hz_register == 1'b1)) || (EA == `TRIGGER) || (EA == `ON) || (EA == `STOP_ALARM));
+
+assign enable_siren = (EA == `ON || (EA == `STOP_ALARM && (!c_door_driver && !c_door_pass)));
 
 endmodule
