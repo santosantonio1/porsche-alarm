@@ -1,3 +1,7 @@
+//----------------------------------------------------
+//      7 SEGMENT DISPLAY NEXYS A7 DRIVER
+//----------------------------------------------------
+
 `timescale 1ns / 1ps
 
 module display(
@@ -15,7 +19,7 @@ module display(
     output [7:0] an
     );    
     
-    // seleciona o display a ser mostrado
+    // Select display to be shown
     reg [2:0] selected;
     always @(posedge clock, posedge reset) begin
         if(reset) begin
@@ -75,7 +79,7 @@ module display(
     assign segments[14] = 7'b0000110;
     assign segments[15] = 7'b0001110;
 
-    // passagem do tempo
+    // Time routine
     reg timer1ms;
     reg [16:0] counter;
     

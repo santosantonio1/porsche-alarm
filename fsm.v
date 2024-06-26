@@ -1,3 +1,11 @@
+//------------------------------------------------------------
+//
+//
+//                FINITE STATE MACHINE DRIVER
+//
+//
+//------------------------------------------------------------
+
 `define SET 0
 `define OFF 1
 `define TRIGGER 2
@@ -16,11 +24,18 @@ module fsm(
     output[2:0] EA_DISPLAY
 );
 
+// Main fsm
 reg[2:0] EA, PE;
+
+// FSM for setting up the alarm and time selector
 reg[1:0] ARM_EA, ARM_PE, time_sel;
 
+// Ready or not for set up
 wire arm;
 
+//--------------------------------------------
+//              STATE TRANSITION
+//--------------------------------------------
 always @(posedge clock, posedge reset)
 begin
     if(reset) begin
@@ -30,6 +45,9 @@ begin
     end
 end
 
+//----------------------------------------------------------------------
+//                       MAIN FSM DEFINITION
+//----------------------------------------------------------------------
 always @*
 begin
     if(reprogram) begin 
@@ -38,30 +56,35 @@ begin
     if(ignition)  PE <= `OFF;
     else begin
         case(EA)
+            // Alarm set up
             `SET:
             begin
                 if(door_driver || door_pass)    PE <= `TRIGGER;
                 else        PE <= `SET;
             end
 
+            // Alarm disarmed
             `OFF:
             begin
                 if(expired && arm)  PE <= `SET;
                 else PE <= `OFF;
             end
 
+            // Trigger alarm (count down)
             `TRIGGER:
             begin
                 if(expired)     PE <= `ON;
                 else            PE <= `TRIGGER;
             end
 
+            // Alarm on
             `ON:
             begin
                 if(!door_driver && !door_pass)     PE <= `STOP_ALARM;
                 else    PE <= `ON;
             end
 
+            // Wait for  T_ALARM_ON
             `STOP_ALARM:
             begin
                 if(expired)     PE <= `SET;
@@ -76,6 +99,9 @@ begin
     end
 end
 
+//--------------------------------------------
+//      INNER FSM STATE TRANSITION
+//--------------------------------------------
 always @(posedge clock, posedge reset)
 begin
     if(reset) begin
@@ -85,6 +111,9 @@ begin
     end
 end
 
+//------------------------------------------------------------------------------
+//                       INNER FSM TO SETUP ALARM
+//------------------------------------------------------------------------------
 always @*
 begin
     case(ARM_EA)
@@ -116,6 +145,9 @@ begin
     endcase
 end
 
+//--------------------------------------------------
+//              TIMER DELAY SELECTOR
+//--------------------------------------------------
 always @(posedge clock, posedge reset)
 begin
     if(reset) begin
@@ -130,24 +162,27 @@ begin
             `OFF:   time_sel <= 0;
 
             `TRIGGER:   time_sel <= 3;
-            // default: time_sel <= 3;
         endcase
     end
 end
 
-assign start_timer = (EA == `TRIGGER && expired) || 
-                     (EA == `OFF && ARM_EA == `WAIT_DOOR_CLOSE && ARM_PE == `START_ARM_DELAY) ||
-                     (EA == `SET && PE == `TRIGGER) ||
+// START TIMER WHEN APPROPRIATE
+assign start_timer = (EA == `TRIGGER && expired)        || 
+                     (EA == `OFF && ARM_EA == `WAIT_DOOR_CLOSE && ARM_PE == `START_ARM_DELAY)  ||
+                     (EA == `SET && PE == `TRIGGER)     ||
                      (EA == `ON && PE == `STOP_ALARM);
 
+// SIGNAL TO SET UP THE ALARM
 assign arm = (ARM_EA == `START_ARM_DELAY);
 
+// 2 SEC PERIOD ALARM STATUS
 assign status = ((EA == `SET && (one_hz_enable)) || (EA == `TRIGGER) || (EA == `ON) || EA == (`STOP_ALARM));
 
+// ALARM ITSELF
 assign enable_siren = (EA == `ON || EA == `STOP_ALARM);
 
+//...
 assign interval = time_sel;
-
 assign EA_DISPLAY = EA;
 assign ARM_EA_DISPLAY = ARM_EA;
 

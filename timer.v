@@ -1,3 +1,10 @@
+//------------------------------------------------------------
+//
+//
+//                      TIMER DRIVER
+//
+//
+//------------------------------------------------------------
 `define IDLE 0
 `define LOAD 1
 `define OPERATE 2
@@ -11,11 +18,16 @@ module timer(
     output[1:0] EA_DISPLAY
 );
 
+// State, next state
 reg[1:0] EA, PE;
 
+// Counters
 reg[30:0] t, hz_counter;
+
+// Time in seconds
 reg[3:0] t_seg;
 
+// one_hz_enable, half_hz_enable
 reg ohze, hhze;
 
 always @(posedge clock, posedge reset)
@@ -36,16 +48,21 @@ begin
         if(start_timer) PE <= `LOAD;
         else PE <= `IDLE;
     end
+    
+    // Load value
     `LOAD:      
     begin
             PE <= `OPERATE;
     end
+    // Count down 
     `OPERATE: 
     begin
             if(start_timer)      PE <= `LOAD;
             else if(t_seg<=0)    PE <= `DONE;
             else                 PE <= `OPERATE;
     end
+
+    // Waited delay
     `DONE:
     begin
             PE <= `IDLE;
@@ -57,6 +74,7 @@ always @(posedge clock, posedge reset)
 begin
     if(reset) begin
         t_seg <= 0;
+        t <= 0; // Maybe remove
     end else begin
         case(EA)
         
@@ -68,10 +86,12 @@ begin
 
         `OPERATE: 
         begin
+            // clock period = 10 ns ---> 100_000_000 ns = 1 s counted
             if(t < 100_000_000) begin
                 t <= t + 1;
             end else begin
                 t <= 0;
+                // Decrement display
                 t_seg <= t_seg - 1;
             end    
         end
@@ -85,6 +105,7 @@ begin
     end
 end
 
+// Decrement routine for one_hz_enable and half_hz_enable (always running)
 always @(posedge clock, posedge reset)
 begin
     if(reset) begin
@@ -92,8 +113,10 @@ begin
         ohze <= 0;
         hz_counter <= 0;
     end else begin
+        // 1 s
         if(hz_counter < 100_000_000) begin
             hz_counter <= hz_counter + 1;
+            // 0.5 s
             if(hz_counter == 50_000_000)
                 hhze <= 1;
         end else begin
@@ -104,12 +127,12 @@ begin
     end
 end
 
+// Waited delay
 assign expired = (EA == `DONE);
+
 assign one_hz_enable = ohze;
 assign half_hz_enable = hhze;
-
 assign value_display = t_seg;
-
 assign EA_DISPLAY = EA;
 
 endmodule

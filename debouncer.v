@@ -1,11 +1,14 @@
-module debouncer( input clock, reset, noisy,
-                  output reg clean );
+//---------------------------------
+//      DEBOUNCER 1 ms
+//---------------------------------
+module debouncer( 
+    input clock, reset, noisy,
+    output reg clean 
+);
 
-    // debouncer
     reg [19:0] count;
     reg new_input;
 
-    // debouncer
     always @(posedge clock)
     begin
         if (reset) begin 
