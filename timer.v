@@ -7,7 +7,8 @@ module timer(
     input clock, reset, start_timer, 
     input[3:0] value,
     output expired, one_hz_enable, half_hz_enable,
-    output[3:0] value_display
+    output[3:0] value_display,
+    output[1:0] EA_DISPLAY
 );
 
 reg[1:0] EA, PE;
@@ -108,5 +109,7 @@ assign one_hz_enable = ohze;
 assign half_hz_enable = hhze;
 
 assign value_display = t_seg;
+
+assign EA_DISPLAY = EA;
 
 endmodule
