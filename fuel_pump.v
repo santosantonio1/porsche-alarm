@@ -1,13 +1,38 @@
+//---------------------------------
+//--                             --
+//--       D E F I N E S         --
+//--                             --
+//---------------------------------
+
 `define OFF 0
 `define ON 1
+
+//---------------------------------
+//--                             --
+//--         M O D U L E         --
+//--                             --
+//---------------------------------
 
 module fuel_pump(
     input clock, reset, ignition, switch, pedal,
     output status
 );
 
+//---------------------------------
+//--                             --
+//--     R E G I S T E R S       --
+//--                             --
+//---------------------------------
+
 reg EA, PE;
 
+//---------------------------------
+//--                             --
+//--        P R O C E S S        --
+//--                             --
+//---------------------------------
+
+//Always que faz a atualização do EA baseado em Clock
 always @(posedge clock, posedge reset) 
 begin
     if(reset) begin
@@ -17,18 +42,25 @@ begin
     end
 end
 
+//Condições de transição para o próximo estado
 always @* 
 begin
     case(EA)
-        `OFF:
+        `OFF:   //Fuel Pump fica desligado caso o: Hidden_Switch esteja desligado, Break Desligado e o Ignition Desligado
             if(switch && pedal && ignition)     PE <= `ON;
             else            PE <= `OFF;
         
-        `ON:
+        `ON:    //Desligou a ignição = desativou a bomba de combustivel
             if(!ignition)   PE <= `OFF;
             else            PE <= `ON;
     endcase    
 end
+
+//---------------------------------
+//--                             --
+//--       A S S I G N s         --
+//--                             --
+//---------------------------------
 
 assign status = (EA == `ON) ? 1 : 0;
 
