@@ -1,3 +1,9 @@
+//---------------------------------
+//--                             --
+//--       D E F I N E S         --
+//--                             --
+//---------------------------------
+
 `define SET 0
 `define OFF 1
 `define TRIGGER 2
@@ -9,6 +15,12 @@
 `define WAIT_DOOR_CLOSE 2
 `define START_ARM_DELAY 3
 
+//---------------------------------
+//--                             --
+//--         M O D U L E         --
+//--                             --
+//---------------------------------
+
 module top(
     input clock, reset, ignition, door_driver, door_pass, hidden_sw, pedal, reprogram,
     input[1:0] time_select_param,
@@ -18,19 +30,37 @@ module top(
     output[7:0] an, dec_cat
 );
 
-reg[2:0] EA, PE, interval;
+//---------------------------------
+//--                             --
+//--     R E G I S T E R S       --
+//--                             --
+//---------------------------------
 
+//Registradores para poder controlar a FSM principal
+reg[2:0] EA, PE;
+
+//Registrador que é responsável por mandar o Intervalo que vai ser utilizado pelo Time_Parameters
+reg[2:0] interval;
+
+//Wires conectados nos Debouncers
 wire c_ignition, c_door_driver, c_door_pass, c_hidden_sw, c_pedal, c_reprogram;
 wire tsp1, tsp0, t3, t2, t1, t0; 
-// reg enable_siren;
+
+//Wire conectado com a entrada do Driver Siren_Generator
 wire enable_siren;
 
-wire one_hz_enable, half_hz_enable, expired, start_timer, has_pass, arm;
+//Wires que se conectam com o Driver de Tempo
+wire one_hz_enable, half_hz_enable, expired, start_timer;
+
+//Wires conectado com o value para conectar no Driver de Tempo. E o Value_Display para "Debuggar" na FPGA
 wire[3:0] value, value_display;
 
-//-----------------------------------------------------------------------
-//      DEBOUNCERS
-//-----------------------------------------------------------------------
+//---------------------------------
+//--                             --
+//--    D E B O U N C E R S      --
+//--                             --
+//---------------------------------
+
 debouncer DEB_IG(
     clock, reset, ignition, c_ignition
 );
@@ -80,9 +110,12 @@ debouncer DEB_TIME_VALUE_0(
 );
 //-----------------------------------------------------------------------
 
-//-------------------------------------------------------------------------------------------------------------
-//              DRIVERS
-//-------------------------------------------------------------------------------------------------------------
+//---------------------------------
+//--                             --
+//--       D R I V E R S         --
+//--                             --
+//---------------------------------
+
 fuel_pump FUEL_PUMP_DRIVER(
     clock, reset, c_ignition, c_hidden_sw, c_pedal, fuel_pump_status
 );
@@ -113,6 +146,13 @@ display DISPLAY_DRIVER(
 );
 //-------------------------------------------------------------------------------------------------------------
 
+//---------------------------------
+//--                             --
+//--  F S M   -  P R O C E S S   --
+//--                             --
+//---------------------------------
+
+//Atualiza a Maquina de Estados Principais (Estado "Inicial" é Armado)
 always @(posedge clock, posedge reset)
 begin
     if(reset) begin
@@ -122,6 +162,7 @@ begin
     end
 end
 
+//Atualiza o PE que será recebido pelo EA (Ou seja, atualizador de Próximo Estado)
 always @*
 begin
     if(c_reprogram) begin
@@ -195,6 +236,13 @@ begin
     end
 end
 
+//---------------------------------
+//--                             --
+//--   Value's of Interval       --
+//--                             --
+//---------------------------------
+
+//Always responsável pela inserção do valor de "Intervalo" no Timer_Driver
 always @(posedge clock, posedge reset)
 begin
     if(reset) begin
@@ -221,8 +269,16 @@ begin
     end
 end
 
+//-------------------------------------------------
+//--                             
+//--     State of ARM_EA (FSM do Armado)       
+//--                             
+//-------------------------------------------------
+
+//Registrador para controlar essa FSM Paralela
 reg[2:0] ARM_EA, ARM_PE;
 
+//Atualiza o Estado_Atual do Detector de Armar
 always @(posedge clock, posedge reset)
 begin
     if(reset) begin
@@ -232,19 +288,7 @@ begin
     end
 end
 
-reg a;
-always @(posedge clock, posedge reset) begin
-    if(reset)
-        a <= 0;
-    else begin
-        if(ARM_EA == `START_ARM_DELAY) begin
-            a <= 1;
-        end else begin
-            a <= 0;
-        end
-    end
-end
-
+//Condições de troca para o ARM_PE (Importante para detecção)
 always @* begin
 case(ARM_EA)
         `WAIT_IGNITION_OFF:
@@ -274,13 +318,15 @@ case(ARM_EA)
             end
         end
         end
+
         3'd5:
             ARM_PE <= 3'd0;
-            
             
         default: ARM_PE <= `WAIT_DOOR_OPEN;
     endcase
 end
+
+//-------------------------------------------------------------------------------------------------------------
 
 reg[1:0] E_EA, E_PE;
 wire waited;
@@ -310,6 +356,12 @@ begin
     endcase
 end
 
+//---------------------------------
+//--                             --
+//--       A S S I G N s         --
+//--                             --
+//---------------------------------
+
 assign waited = (E_EA == 2'b10);
 
 assign start_timer = (EA == `SET && (c_door_driver || c_door_pass)) ||
@@ -317,10 +369,6 @@ assign start_timer = (EA == `SET && (c_door_driver || c_door_pass)) ||
                      //(EA == `ON && PE == `STOP_ALARM) || 
                      (EA == 3'd5) ||
                      (EA == 3'd6);
-
-assign has_pass = (EA == `SET && c_door_pass);
-
-assign arm = (ARM_EA == `START_ARM_DELAY);
 
 assign status = ((EA == `SET && (one_hz_enable == 1'b1)) || (EA == `TRIGGER) || (EA == `ON) || (EA == `STOP_ALARM));
 
