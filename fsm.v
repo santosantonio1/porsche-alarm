@@ -125,7 +125,8 @@ begin
 
         `WAIT_DOOR_OPEN:
         begin
-            if(door_driver)       ARM_PE <= `WAIT_DOOR_CLOSE;
+            if(ignition) ARM_PE <= `WAIT_IGNITION_OFF;
+            else if(door_driver)       ARM_PE <= `WAIT_DOOR_CLOSE;
             else        ARM_PE <= `WAIT_DOOR_OPEN;
         end
 
