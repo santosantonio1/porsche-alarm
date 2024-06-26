@@ -17,7 +17,7 @@ module display(
     
     // seleciona o display a ser mostrado
     reg [2:0] selected;
-    always @(posedge clock) begin
+    always @(posedge clock, posedge reset) begin
         if(reset) begin
             selected <= 3'd0;
         end
@@ -79,7 +79,7 @@ module display(
     reg timer1ms;
     reg [16:0] counter;
     
-    always @(posedge clock) begin
+    always @(posedge clock, posedge reset) begin
         if(reset) begin
             timer1ms <=  1'b0;
             counter  <= 17'd0;

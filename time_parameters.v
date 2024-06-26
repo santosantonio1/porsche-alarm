@@ -1,4 +1,4 @@
-```//---------------------------------
+//---------------------------------
 //--                             --
 //--       D E F I N E S         --
 //--                             --
@@ -8,12 +8,6 @@
 `define T_DRIVER_DELAY    2'b01
 `define T_PASSENGER_DELAY 2'b10
 `define T_ALARM_ON        2'b11
-
-//---------------------------------
-//--                             --
-//--         M O D U L E         --
-//--                             --
-//---------------------------------
 
 module time_parameters(
     input clock,
@@ -27,30 +21,10 @@ module time_parameters(
     output [3:0] value
 );
 
-//---------------------------------
-//--                             --
-//--     R E G I S T E R S       --
-//--                             --
-//---------------------------------
-
 reg [3:0] T_ARM_DELAY;              //Default: 0110 - 00
 reg [3:0] T_DRIVER_DELAY;           //Default: 1000 - 01
 reg [3:0] T_PASSENGER_DELAY;        //Default: 1111 - 10
 reg [3:0] T_ALARM_ON;               //Default: 1010 - 11
-
-//---------------------------------
-//--                             --
-//--           D U T s           --
-//--                             --
-//---------------------------------
-
-
-
-//---------------------------------
-//--                             --
-//--        P R O C E S S        --
-//--                             --
-//---------------------------------
 
 always @(posedge clock, posedge reset) begin
     if(reset) begin
@@ -72,16 +46,10 @@ always @(posedge clock, posedge reset) begin
     end
 end
 
-//---------------------------------
-//--                             --
-//--       A S S I G N s         --
-//--                             --
-//---------------------------------
-
 assign value  =  (interval == `T_ARM_DELAY       )? T_ARM_DELAY      :
                  (interval == `T_DRIVER_DELAY    )? T_DRIVER_DELAY   :
                  (interval == `T_PASSENGER_DELAY)? T_PASSENGER_DELAY: 
                  (interval == `T_ALARM_ON       )? T_ALARM_ON : 4'b0000;
 
 
-endmodule```
+endmodule
