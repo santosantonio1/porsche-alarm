@@ -1,4 +1,4 @@
-```//---------------------------------
+//---------------------------------
 //--                             --
 //--       D E F I N E S         --
 //--                             --
@@ -40,14 +40,6 @@ reg [3:0] T_ALARM_ON;               //Default: 1010 - 11
 
 //---------------------------------
 //--                             --
-//--           D U T s           --
-//--                             --
-//---------------------------------
-
-
-
-//---------------------------------
-//--                             --
 //--        P R O C E S S        --
 //--                             --
 //---------------------------------
@@ -78,10 +70,8 @@ end
 //--                             --
 //---------------------------------
 
-assign value  =  (interval == `T_ARM_DELAY       )? T_ARM_DELAY      :
-                 (interval == `T_DRIVER_DELAY    )? T_DRIVER_DELAY   :
-                 (interval == `T_PASSENGER_DELAY)? T_PASSENGER_DELAY: 
-                 (interval == `T_ALARM_ON       )? T_ALARM_ON : 4'b0000;
-
-
-endmodule```
+assign value  =  (interval == `T_ARM_DELAY) ? T_ARM_DELAY :
+                 (interval == `T_DRIVER_DELAY) ? T_DRIVER_DELAY :
+                 (interval == `T_PASSENGER_DELAY) ? T_PASSENGER_DELAY : 
+                 (interval == `T_ALARM_ON)? T_ALARM_ON : 4'b0000;
+endmodule
