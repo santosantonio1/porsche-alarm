@@ -1,33 +1,14 @@
 //---------------------------------
 //--                             --
-//--          N O T E S          --
-//--                             --
-//---------------------------------
-//--
-//---------------------------------
-
-//---------------------------------
-//--                             --
 //--       D E F I N E S         --
 //--                             --
 //---------------------------------
 
-//---------------------------------
-//--                             --
-//--         M O D U L E         --
-//--                             --
-//---------------------------------
-
 module timer(
-    input clock,
-    input reset,
-    input [3:0] value,          //Valor BIN que é equivalente a segundos
-    input start_timer,
-    output expired,             //Retorna para o sistema principal
-    output one_hz_enable,       //Retorna para o sistema principal
-    output half_hz_enable,       //Utilizado na Sirene como Input
-
-    output [3:0] value_display   //Utilizado para mostrar no Display o Valor
+    input clock, reset, start_timer,
+    input[3:0] value, 
+    output expired, one_hz_enable, half_hz_enable,
+    output[3:0] value_display
 );
 
 //---------------------------------
@@ -36,20 +17,10 @@ module timer(
 //--                             --
 //---------------------------------
 
-reg [30:0] t;       //Timer to later convert to Second
-reg [30:0] t2;      //Timer for Half Hertz Enable
-
-reg ohze;           //One Hz Enable
-reg hhze;           //Two Hz Enable
-
-reg [3:0] contador_interno;        //Contador Interno
-reg [4:0] contador_interno_dobro;  //Contador Secundário para Meio Segundo  
-
-//---------------------------------
-//--                             --
-//--           D U T s           --
-//--                             --
-//---------------------------------
+reg [3:0] t_seg;
+reg [30:0] t;
+reg [30:0] t2;
+reg ohze, hhze;
 
 //---------------------------------
 //--                             --
@@ -57,52 +28,53 @@ reg [4:0] contador_interno_dobro;  //Contador Secundário para Meio Segundo
 //--                             --
 //---------------------------------
 
-//Always responsável pela redução dos ciclos do T e também da inicialização
-always @(posedge clock, posedge reset)
-begin
+//Always responsável pela ativação do One_Hz_Enable
+always @(posedge clock, posedge reset) begin
     if(reset) begin
-        t <= 30'b0;
-        t2 <= 30'b0;
-        contador_interno <= 4'b0;
-        contador_interno_dobro <= 5'b0;
-        contador_half <= 2'b0;
-        ohze <= 0;
-        hhze <= 0;
+        t <= 31'b0;
+        ohze <= 1'b0;
     end else begin
         if(start_timer) begin
-            t <= 0;
-            t2 <= 0
-            contador_interno <= value;
-            contador_interno_dobro <= value * 2;
-            ohze <= 0;
-            hhze <= 0;
-        end else 
-        begin
-            if(contador_interno > 0) begin 
-                if(t < 100_000_000) begin  
-                    t <= t + 1;
-                    ohze <= 0;
-                end else begin             
-                    t <= 0;
-                    ohze <= 1;
-                end                        
+            t <= 31'b0;
+            ohze <= 1'b0;
+        end else begin
+            if(t < 100_000_000) begin
+                t <= t + 1;
+                ohze <= 1'b0;
             end else begin
-                t <= 0;
-                ohze <= 0;
+                t <= 31'b0;
+                ohze <= 1'b1;
             end
         end
+    end
+end
 
-        begin
-            if(contador_interno_dobro > 0) begin
-                if(t2 < 50_000_000) begin
-                    t2 <= t2 + 1;
-                end else begin
-                    t2 <= 0;
-                    hhze <= ~hhze;
-                end
+//Always responsável pela ativação do Half_Hz_Enable
+always @(posedge clock, posedge reset) begin
+    if(reset) begin
+        t2 <= 31'b0;
+        hhze <= 1'b0;
+    end else begin
+            if(t2 < 50_000_000) begin
+                t2 <= t2 + 1;
+                hhze <= 1'b0;
             end else begin
-                t2 <= 0;
-                hhze <= 0;
+                t2 <= 31'b0;
+                hhze <= 1'b1;
+            end
+    end
+end
+
+//Always responsável pela redução do Segundo (Utilizado no Timer para Expired e Display)
+always @(posedge clock, posedge reset) begin
+    if(reset) begin
+        t_seg <= 4'b0;
+    end else begin
+        if(start_timer) begin  
+            t_seg <= value;
+        end else begin
+            if(t_seg > 0) begin
+                if(ohze) t_seg <= t_seg - 1;
             end
         end
     end
@@ -114,8 +86,8 @@ end
 //--                             --
 //---------------------------------
 
-assign value_display = contador_interno;
-assign expired = (contador_interno <= 0)? 1 : 0;
+assign value_display = t_seg;
+assign expired = (t_seg <= 0);
 assign one_hz_enable = ohze;
 assign half_hz_enable = hhze;
 
